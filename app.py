@@ -15,6 +15,8 @@ openai_client=OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 import google.generativeai as genai
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
+deepseek_client=OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://openrouter.ai/api/v1")
+
 def ask_openai(prompt:str,model="gpt-4o-mini"):
     resp=openai_client.responses.create(model=model,input=prompt)
     return resp.output_text
@@ -23,6 +25,12 @@ def ask_gemini(prompt:str,model="gemini-2.5-flash"):
     resp=genai.GenerativeModel(model).generate_content(prompt)
     return resp.text
 
+def ask_deepseek(prompt:str,model="deepseek/deepseek-r1:free"):
+    resp=deepseek_client.chat.completions.create(model=model,messages=[{"role":"user","content":prompt}])
+    return resp.choices[0].message.content
+
+
+
 @app.route("/api/respond", methods=["POST"])
 def respond():
     data=request.get_json(force=True)
@@ -30,7 +38,7 @@ def respond():
     provider=(data.get("model") or "").lower()
     if not prompt:
         return jsonify({"error":"prompt required"}),400
-    if provider not in {"chatgpt","gemini"}:
+    if provider not in {"chatgpt","gemini","deepseek"}:
         return jsonify({"error":"invalid model"}),400
     try:
         if provider=="chatgpt":
@@ -40,11 +48,18 @@ def respond():
                 "model":"gpt-4o-mini",
                 "answer":answer
             })
-        else:
+        elif provider=="gemini":
             answer=ask_gemini(prompt)
             return jsonify({
                 "provider":"gemini",
                 "model":"gemini-2.5-flash",
+                "answer":answer
+            })
+        else:
+            answer=ask_deepseek(prompt)
+            return jsonify({
+                "provider":"deepseek",
+                "model":"deepseek-r1:free",
                 "answer":answer
             })
     except Exception as e:
