@@ -38,7 +38,7 @@ def respond():
     provider=(data.get("model") or "").lower()
     if not prompt:
         return jsonify({"error":"prompt required"}),400
-    if provider not in {"chatgpt","gemini","deepseek"}:
+    if provider not in {"chatgpt","gemini","deepseek","all"}:
         return jsonify({"error":"invalid model"}),400
     try:
         if provider=="chatgpt":
@@ -55,15 +55,28 @@ def respond():
                 "model":"gemini-2.5-flash",
                 "answer":answer
             })
-        else:
+        elif provider=="deepseek":
             answer=ask_deepseek(prompt)
             return jsonify({
                 "provider":"deepseek",
                 "model":"deepseek-r1:free",
                 "answer":answer
             })
+        else:
+            gpt_response=ask_openai(prompt)
+            gemini_response=ask_gemini(prompt)
+            deepseek_response=ask_deepseek(prompt)
+            return jsonify({
+                "provider":"all",
+                "answers":{
+                    "openai":gpt_response,
+                    "gemini":gemini_response,
+                    "deepseek":deepseek_response
+                }
+            })
     except Exception as e:
         return jsonify({"error":"failed","detail":str(e)}),500
+
 
 @app.route("/api/hello",methods=["GET"])
 def hello():
