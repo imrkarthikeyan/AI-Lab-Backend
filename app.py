@@ -1,4 +1,7 @@
 import os
+from pyexpat.errors import messages
+from random import choices
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -17,16 +20,41 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 deepseek_client=OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://openrouter.ai/api/v1")
 
-def ask_openai(prompt:str,model="gpt-4o-mini"):
-    resp=openai_client.responses.create(model=model,input=prompt)
-    return resp.output_text
+def ask_openai(history,model="gpt-4o-mini"):
+    messages=[]
+    for h in history:
+        if h["type"]=="user":
+            role="user"
+        else:
+            role="assistant"
+        messages.append({"role":role,"content":h["text"]})
+    resp=openai_client.chat.completions.create(model=model,messages=messages)
+    return resp.choices[0].message.content
 
-def ask_gemini(prompt:str,model="gemini-2.5-flash"):
-    resp=genai.GenerativeModel(model).generate_content(prompt)
+
+def ask_gemini(history,model="gemini-2.5-flash"):
+    parts=[]
+    for h in history:
+        if h["type"]=="user":
+            role="user"
+        else:
+            role="assistant"
+            parts.append({"role":role,"content":h["text"]})
+    gen_model=genai.GenerativeModel(model)
+    chat=gen_model.start_chat(history=parts)
+    resp=chat.send_message(history[-1]["text"])
     return resp.text
 
-def ask_deepseek(prompt:str,model="deepseek/deepseek-r1:free"):
-    resp=deepseek_client.chat.completions.create(model=model,messages=[{"role":"user","content":prompt}])
+
+def ask_deepseek(history,model="deepseek/deepseek-r1:free"):
+    messages = []
+    for h in history:
+        if h["type"] == "user":
+            role = "user"
+        else:
+            role = "assistant"
+        messages.append({"role": role, "content": h["text"]})
+    resp=deepseek_client.chat.completions.create(model=model,messages=messages)
     return resp.choices[0].message.content
 
 
@@ -34,38 +62,41 @@ def ask_deepseek(prompt:str,model="deepseek/deepseek-r1:free"):
 @app.route("/api/respond", methods=["POST"])
 def respond():
     data=request.get_json(force=True)
-    prompt=(data.get("prompt") or "").strip()
+    history=data.get("history",[])
     provider=(data.get("model") or "").lower()
-    if not prompt:
-        return jsonify({"error":"prompt required"}),400
-    if provider not in {"chatgpt","gemini","deepseek","all"}:
-        return jsonify({"error":"invalid model"}),400
+    prompt=data.get("prompt","").strip()
+    if not history and prompt:
+        history=[{"type":"user","text":prompt}]
+
+    if not history:
+        return jsonify({"error":"prompt required"}), 400
+
     try:
         if provider=="chatgpt":
-            answer=ask_openai(prompt)
+            answer=ask_openai(history)
             return jsonify({
                 "provider":"openai",
                 "model":"gpt-4o-mini",
                 "answer":answer
             })
         elif provider=="gemini":
-            answer=ask_gemini(prompt)
+            answer=ask_gemini(history)
             return jsonify({
                 "provider":"gemini",
                 "model":"gemini-2.5-flash",
                 "answer":answer
             })
         elif provider=="deepseek":
-            answer=ask_deepseek(prompt)
+            answer=ask_deepseek(history)
             return jsonify({
                 "provider":"deepseek",
                 "model":"deepseek-r1:free",
                 "answer":answer
             })
         else:
-            gpt_response=ask_openai(prompt)
-            gemini_response=ask_gemini(prompt)
-            deepseek_response=ask_deepseek(prompt)
+            gpt_response=ask_openai(history)
+            gemini_response=ask_gemini(history)
+            deepseek_response=ask_deepseek(history)
             return jsonify({
                 "provider":"all",
                 "answers":{
