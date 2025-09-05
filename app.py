@@ -32,18 +32,15 @@ def ask_openai(history,model="gpt-4o-mini"):
     return resp.choices[0].message.content
 
 
-def ask_gemini(history,model="gemini-2.5-flash"):
-    parts=[]
-    for h in history:
-        if h["type"]=="user":
-            role="user"
-        else:
-            role="assistant"
-            parts.append({"role":role,"content":h["text"]})
+def ask_gemini(history, model="gemini-2.5-flash"):
     gen_model=genai.GenerativeModel(model)
-    chat=gen_model.start_chat(history=parts)
-    resp=chat.send_message(history[-1]["text"])
+    conv=[]
+    for h in history:
+        role="user" if h["type"]=="user" else "model"
+        conv.append({"role":role, "parts":[h["text"]]})
+    resp=gen_model.generate_content(contents=conv)
     return resp.text
+
 
 
 def ask_deepseek(history,model="deepseek/deepseek-r1:free"):
